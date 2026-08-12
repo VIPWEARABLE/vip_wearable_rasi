@@ -1,0 +1,113 @@
+커널 디바이스 트리 설정 파일 (/boot/firmware/config.txt)
+sudo nano /boot/firmware/config.txt
+
+[pi5]
+dtoverlay=nospi10
+dtoverlay=uart0       # 💡 40핀 헤더의 GPIO 14(TX), 15(RX)를 ttyAMA0 포트로 할당 및 활성화
+pcie_aspm=off         # 💡 라즈베리파이 5 고유의 PCIe/RP1 버스 가변 절전 모드 강제 비활성화 (BLE 단절 방지 핵심)
+dtparam=ant2          # 💡 내장 무선 안테나 신호 감도 최적화 고정
+
+[all]
+dtparam=bluetooth=on  # 💡 블루투스 물리 칩셋 컨트롤러 활성화
+
+----------------------------------------------------------------------------------------------
+
+BlueZ 메인 프로토콜 설정 파일 (/etc/bluetooth/main.conf)
+sudo nano /etc/bluetooth/main.conf
+
+[General]
+ConnSupvTimeout = 15000   # 💡 감시 타임아웃을 2~5초에서 15초로 늘려 순간적 신호 왜곡 시 단절 방지
+PageTimeout = 8192        # 💡 장치 탐색 및 무선 핸드셰이크 페이지 타임아웃 마진 조정
+FastConnectable = true    # 💡 백그라운드 상시 고속 연결 수립 모드 지정
+ConnMinInterval = 6       # 💡 최소 연결 인터벌 고정
+ConnMaxInterval = 9       # 💡 최대 연결 인터벌 고정
+
+----------------------------------------------------------------------------------------------
+
+하드웨어 포트 권한 및 리눅스 계정 그룹 설정
+
+# 시리얼 직렬 통신 장치 접근 권한 그룹에 계정 추가
+sudo usermod -aG dialout $USER
+
+# D-Bus 및 BlueZ 블루투스 제어 권한 그룹에 계정 추가
+sudo usermod -aG bluetooth user15 
+sudo usermod -aG lp user15 
+
+# 파일 시스템 장치 노드의 읽기/쓰기 권한 전면 개방
+sudo chmod 666 /dev/ttyAMA0 
+
+# 세션 재시작 없이 현재 터미널에 dialout 그룹 권한 즉시 반영
+newgrp dialout
+
+----------------------------------------------------------------------------------------------
+
+리눅스 시스템 시리얼 콘솔 점유 해제 및 영구 차단
+
+# 1. 시리얼 콘솔 로그인 백엔드 서비스 즉시 중단
+sudo systemctl stop serial-getty@ttyAMA0.service 
+
+# 2. 리눅스 부팅 시 시리얼 콘솔 서비스 자동 기동 영구 비활성화
+sudo systemctl disable serial-getty@ttyAMA0.service
+
+----------------------------------------------------------------------------------------------
+
+BLE 블루투스 하드웨어 인프라 및 데몬 제어
+
+# 블루투스 소프트웨어 무선 락 해제
+sudo rfkill unblock bluetooth 
+
+# 물리 블루투스 컨트롤러 장치 인터페이스 강제 기동
+sudo hciconfig hci0 up 
+
+# D-Bus 시스템 메시지 버스 및 BlueZ 블루투스 백그라운드 데몬 서비스 재시작 (설정 변경 반영)
+sudo systemctl restart dbus 
+sudo systemctl restart bluetooth
+
+----------------------------------------------------------------------------------------------
+
+하드웨어 상태 실시간 검증 및 디버깅 툴킷
+
+# 40핀 헤더 GPIO 14, 15번이 시리얼 대체 기능(TXD0/RXD0)으로 맵핑되었는지 검사
+pinctrl get 14,15
+
+# 블루투스 물리 칩셋 컨트롤러 가동 세부 로그 및 UP RUNNING 상태 스캔 
+hciconfig -a 
+
+# BlueZ 백그라운드 서비스의 active (running) 생존 여부 및 실시간 에러 추적 
+sudo systemctl status bluetooth 
+
+# 커널 레이어 직접 지시 기반 송출 중인 BLE 광고 인스턴스 명세 실시간 스캔 
+sudo btmgmt advinfo 
+
+# 시스템 내 개설되어 동작 중인 블루투스 장치의 가용 파라미터 구성 정보 전체 덤프
+bluetoothctl info
+
+----------------------------------------------------------------------------------------------
+
+# 서비스 실행 상태 확인
+sudo systemctl status bluetooth
+
+# 블루투스 장치 상태 확인 (hciconfig)
+hciconfig
+
+# 블루투스 제어 콘솔 진입
+bluetoothctl -> show
+
+# 블루투스 어댑터 껐다 켜기
+sudo hciconfig hci0 down
+sudo hciconfig hci0 up
+
+# 1. 블루투스 서비스 중지
+sudo systemctl stop bluetooth
+
+# 2. 시스템 D-Bus 데몬 재시작
+sudo systemctl restart dbus
+
+# 3. 블루투스 서비스 다시 시작
+sudo systemctl start bluetooth
+
+# 등록된 모든 BLE 광고 초기화
+sudo btmgmt --index 0 clr-adv
+
+# 블루투스 전원 강제 ON
+sudo btmgmt --index 0 power on
