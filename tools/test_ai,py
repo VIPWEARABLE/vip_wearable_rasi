@@ -1,0 +1,83 @@
+import sys
+import os
+import cv2
+import numpy as np
+import torch
+from flask import Flask, Response
+from ultralytics import YOLO
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import basic.config as config
+from basic.hardware_controller import HardwareController
+from ai.utils import FPSCalculator, calculate_avoidance_direction
+
+app = Flask(__name__)
+output_frame = None
+
+def generate_frames():
+    global output_frame
+    while True:
+        if output_frame is not None:
+            ret, buffer = cv2.imencode('.jpg', output_frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+@app.route('/')
+def index():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def run_ai():
+    global output_frame
+    torch.set_num_threads(1)
+    
+    try:
+        hw = HardwareController(port=config.UART_PORT, baudrate=config.BAUDRATE)
+    except Exception:
+        hw = None
+
+    od_model = YOLO("/home/user15/work/project/VIP_WEARABLE/vip_wearable_rasi/models/Quantization_models/yolo26n.onnx", task="detect")
+    sem_model = YOLO("/home/user15/work/project/VIP_WEARABLE/vip_wearable_rasi/models/Quantization_models/best_int8_freeze5.onnx", task="semantic")
+
+    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.HEIGHT)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    fps_calc = FPSCalculator(interval=1.0)
+    print("\n🌐 웹 스트리밍 시작! PC 브라우저에서 http://[라즈베리파이IP]:5000 접속\n", flush=True)
+
+    while True:
+        ret, frame = cap.read()
+        if not ret: continue
+
+        resized_frame = cv2.resize(frame, (config.WIDTH, config.HEIGHT))
+        od_res = od_model(resized_frame, imgsz=[256, 320], classes=[0,1,2], verbose=False, conf=0.60, max_det=5)
+        sem_res = sem_model(resized_frame, imgsz=[256, 320], classes=[0,1,2], verbose=False, show=False)
+
+        is_avoidance = False
+        avoid_angle = 0.0
+        if od_res[0].boxes is not None and len(od_res[0].boxes) > 0:
+            direction_id, total_score = calculate_avoidance_direction(od_res[0].boxes, config.WIDTH, config.HEIGHT)
+            if total_score > 0.3:
+                is_avoidance = True
+                avoid_angle = -config.AI_AVOID_ANGLE if direction_id == 1 else config.AI_AVOID_ANGLE
+
+        if hw is not None:
+            if is_avoidance: hw.update_haptic(angle_error=avoid_angle, is_avoidance=True)
+            else: hw.update_haptic(angle_error=0.0, is_avoidance=False)
+
+        fps_calc.update()
+        od_img = od_res[0].plot()
+        sem_img = sem_res[0].plot(boxes=False)
+        combined = np.hstack((od_img, sem_img))
+        cv2.putText(combined, f"FPS: {fps_calc.get_fps():.1f} | Avoid: {is_avoidance}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+
+        output_frame = combined
+
+if __name__ == '__main__':
+    import threading
+    t = threading.Thread(target=run_ai, daemon=True)
+    t.start()
+    app.run(host='0.0.0.0', port=5000, threaded=True)

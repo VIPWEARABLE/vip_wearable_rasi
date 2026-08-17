@@ -7,12 +7,16 @@ OD_PROCESSING = Value('b', True)
 SEM_PROCESSING = Value('b', True)
 OBJECT_EXIST = Value('b', False)
 ANGLE_LEFT_RIGHT = Value('b', False)
-ANGLE_OK = Value('b', False)
-ANGLE_VALUE = Value('f', 0.0)
-PITCH = Value('f', 0.0)
-BLE_CONNECTED = Value('b', False) # BLE 연결 상태를 공유하는 플래그
+ANGLE_OK = Value('b', False)       # 목적지 입력 여부 (이게 True일 때만 AI 가동)
+ANGLE_VALUE = Value('f', 999.0)    # 앱에서 넘겨주는 각도 (999.0은 초기/대기 상태)
+BLE_CONNECTED = Value('b', False)  # BLE 연결 상태
 
-# 프로세스 간 상태 공유 (Mutex/Semaphore 역할)
-IS_ROTATING = Value('b', False)      # True: 제자리 회전 중 (오차 >= 20도)
-AI_AVOIDING = Value('b', False)      # True: AI가 전방 장애물 강제 회피 중
-FORCE_APP_RESEND = Value('b', False) # True: AI 회피 종료 즉시 앱 각도를 강제로 밀어넣기 위한 락 해제 트리거
+# IMU 데이터 공유용 변수 추가
+YAW = Value('f', 0.0)
+PITCH = Value('f', 0.0)
+
+# 프로세스 간 상태 공유
+AI_AVOID_ANGLE_VALUE = Value('f', 0.0)
+IS_ROTATING = Value('b', False)      
+AI_AVOIDING = Value('b', False)      
+FORCE_APP_RESEND = Value('b', False)
