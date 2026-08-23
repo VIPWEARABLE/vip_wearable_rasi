@@ -13,7 +13,7 @@ import torch
 import basic.config as config
 import basic.g_val as g
 import basic.handler as handler
-from basic.ble_core import reset_hardware_to_sleep, run_ble_server_process
+from basic.bt_core import reset_hardware_to_sleep, run_bt_server_process
 from basic.hardware_controller import HardwareController
 from ai.od import run_object_detection
 from ai.sem import run_segmentation
@@ -41,11 +41,11 @@ def main():
     shm_array = np.ndarray((config.HEIGHT, config.WIDTH, config.CHANNELS), dtype=np.uint8, buffer=shm.buf)
     
     # 1. 서브 프로세스 실행
-    ble_process = Process(target=run_ble_server_process, daemon=True)
+    bt_process = Process(target=run_bt_server_process, daemon=True)
     od_process = Process(target=run_object_detection, args=(g.FRAME_OK, g.OD_PROCESSING, g.OBJECT_EXIST, g.ANGLE_OK), daemon=True)
     sem_process = Process(target=run_segmentation, args=(g.FRAME_OK, g.SEM_PROCESSING, g.ANGLE_OK), daemon=True)
 
-    ble_process.start()
+    bt_process.start()
     od_process.start()
     sem_process.start()
 
@@ -64,7 +64,7 @@ def main():
     try:
         while True:
             # 1. IMU 및 낙상 감지
-            is_connected = g.BLE_CONNECTED.value
+            is_connected = g.BT_CONNECTED.value
             hw.update_imu(is_connected=is_connected)
             
             if is_connected and hw.check_fall_detection():
@@ -142,7 +142,7 @@ def main():
         reset_hardware_to_sleep()
 
         # 2. 서브프로세스들이 out.release()를 마칠 수 있도록 잠시 대기 후 종료
-        for p in [od_process, sem_process, ble_process]:
+        for p in [od_process, sem_process, bt_process]:
             if p.is_alive():
                 p.terminate() # SIGTERM 전송
                 p.join(timeout=1.0) # 최대 1초 정상 정리 대기

@@ -60,7 +60,7 @@ class HardwareController:
         self.avoid_toggle_state = False
 
     def update_imu(self, is_connected: bool):
-        """BLE 연결 상태에 따라 IMU 데이터를 처리하거나 버림"""
+        """bt 연결 상태에 따라 IMU 데이터를 처리하거나 버림"""
         if not is_connected:
             if self.ser.in_waiting > 0:
                 self.ser.reset_input_buffer()

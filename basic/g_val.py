@@ -9,7 +9,7 @@ OBJECT_EXIST = Value('b', False)
 ANGLE_LEFT_RIGHT = Value('b', False)
 ANGLE_OK = Value('b', False)       # 목적지 입력 여부 (이게 True일 때만 AI 가동)
 ANGLE_VALUE = Value('f', 999.0)    # 앱에서 넘겨주는 각도 (999.0은 초기/대기 상태)
-BLE_CONNECTED = Value('b', False)  # BLE 연결 상태
+BT_CONNECTED = Value('b', False)  # BT 연결 상태
 
 # IMU 데이터 공유용 변수 추가
 YAW = Value('f', 0.0)
