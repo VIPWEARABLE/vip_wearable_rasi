@@ -37,5 +37,7 @@ ENV/
 env.bak/
 venv.bak/
 
+records/
+
 .lgd-*
 *.log
