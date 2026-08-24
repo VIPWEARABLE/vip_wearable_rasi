@@ -15,13 +15,13 @@ bt_rx_buffer = bytearray()
 
 def reset_hardware_to_sleep():
     """앱 연결 종료 또는 단절 시 시스템 상태 초기화"""
-    g.BLE_CONNECTED.value = False
+    g.bt_CONNECTED.value = False
     g.ANGLE_VALUE.value = 999.0
     g.ANGLE_OK.value = False
 
     print("\n==================================================")
-    print("[ble_core.py] 연결 종료 명령(또는 단절) 수신! 대기 모드 진입")
-    print("[ble_core.py] 시스템 대기 모드로 리셋 및 AI 비전 분석 중단")
+    print("[bt_core.py] 연결 종료 명령(또는 단절) 수신! 대기 모드 진입")
+    print("[bt_core.py] 시스템 대기 모드로 리셋 및 AI 비전 분석 중단")
     print("==================================================")
 
 
@@ -32,19 +32,19 @@ def handle_app_packet(value):
             app_state = value[1]
 
             if app_state == 0:
-                print("\n[ble_core.py] 📱 앱 명령: 연결 종료 (Sleep)", flush=True)
+                print("\n[bt_core.py] 📱 앱 명령: 연결 종료 (Sleep)", flush=True)
                 reset_hardware_to_sleep()
 
             elif app_state == 1:
                 print("\n==================================================", flush=True)
-                print("[ble_core.py] 📱 앱 명령: 연결됨/경로취소 (AI ON, 대기 중)", flush=True)
+                print("[bt_core.py] 📱 앱 명령: 연결됨/경로취소 (AI ON, 대기 중)", flush=True)
                 print("==================================================", flush=True)
                 g.ANGLE_VALUE.value = 999.0
                 g.ANGLE_OK.value = False  # 목적지 취소/대기
-                g.BLE_CONNECTED.value = True
+                g.bt_CONNECTED.value = True
 
             elif app_state == 2:
-                print("\n[ble_core.py] 📱 앱 명령: 목적지 입력! (내비게이션 시작)", flush=True)
+                print("\n[bt_core.py] 📱 앱 명령: 목적지 입력! (내비게이션 시작)", flush=True)
                 g.ANGLE_OK.value = True  # ★ 오직 0x33, 0x02 명령이 올 때만 목적지 활성화!
 
         elif len(value) == 5 and value[0] == 0x22:
@@ -57,12 +57,12 @@ def handle_app_packet(value):
             elif g.ANGLE_VALUE.value < -10.0:
                 direction = "왼쪽"
             print(
-                f"[ble_core.py] 수신: 앱 경로 오차: {g.ANGLE_VALUE.value:.1f}° -> {direction} 보정",
+                f"[bt_core.py] 수신: 앱 경로 오차: {g.ANGLE_VALUE.value:.1f}° -> {direction} 보정",
                 flush=True
             )
 
     except Exception as e:
-        print(f"\n[ble_core.py] 오류: 앱 패킷 디코딩 실패: {e}", flush=True)
+        print(f"\n[bt_core.py] 오류: 앱 패킷 디코딩 실패: {e}", flush=True)
 
 
 def handle_bt_payload(data):
@@ -100,11 +100,11 @@ async def send_yaw_loop():
     """라즈베리파이 전역 변수(g.YAW)에 갱신된 IMU 방위각을 앱으로 주기적 스트리밍"""
     global bt_client
     print(
-        f"[ble_core.py] {int(config.YAW_TX_PERIOD_SEC * 1000)}ms 주기 방위각 스트리밍 대기 중..."
+        f"[bt_core.py] {int(config.YAW_TX_PERIOD_SEC * 1000)}ms 주기 방위각 스트리밍 대기 중..."
     )
     while True:
         try:
-            if not g.BLE_CONNECTED.value or bt_client is None:
+            if not g.bt_CONNECTED.value or bt_client is None:
                 await asyncio.sleep(config.YAW_TX_PERIOD_SEC)
                 continue
 
@@ -113,10 +113,10 @@ async def send_yaw_loop():
 
             raw_packet = bytearray([0x11]) + struct.pack("!f", yaw_val)
             bt_client.sendall(bytes(raw_packet))
-            # print(f"[ble_core.py] 송신: 앱으로 방위각(Yaw) 전송 중: {yaw_val:.2f}°")
+            # print(f"[bt_core.py] 송신: 앱으로 방위각(Yaw) 전송 중: {yaw_val:.2f}°")
 
         except Exception as e:
-            print(f"\n[ble_core.py] 경고: 앱 연결 전송 중 오류 발생: {e}")
+            print(f"\n[bt_core.py] 경고: 앱 연결 전송 중 오류 발생: {e}")
             try:
                 if bt_client is not None:
                     bt_client.close()
@@ -133,7 +133,7 @@ async def bt_accept_loop():
     global bt_server, bt_client
 
     if bluetooth is None:
-        print("[ble_core.py] 경고: PyBluez(bluetooth)가 설치되어 있지 않습니다.")
+        print("[bt_core.py] 경고: PyBluez(bluetooth)가 설치되어 있지 않습니다.")
         return
 
     try:
@@ -141,15 +141,15 @@ async def bt_accept_loop():
         bt_server.bind(("", 1))
         bt_server.listen(1)
         print("\n==================================================")
-        print("[ble_core.py] Bluetooth RFCOMM 서버 대기 중... (채널 1)")
+        print("[bt_core.py] Bluetooth RFCOMM 서버 대기 중... (채널 1)")
         print("==================================================")
 
         while True:
             try:
                 client, address = await asyncio.to_thread(bt_server.accept)
                 bt_client = client
-                g.BLE_CONNECTED.value = True
-                print(f"\n[ble_core.py] 📱 안드로이드 앱 연결 성공!: {address}")
+                g.bt_CONNECTED.value = True
+                print(f"\n[bt_core.py] 📱 안드로이드 앱 연결 성공!: {address}")
 
                 while True:
                     data = await asyncio.to_thread(client.recv, 1024)
@@ -157,7 +157,7 @@ async def bt_accept_loop():
                         raise ConnectionError("앱 연결 종료")
                     handle_bt_payload(data)
             except Exception as e:
-                print(f"\n[ble_core.py] 앱 Bluetooth 연결 종료 또는 에러: {e}")
+                print(f"\n[bt_core.py] 앱 Bluetooth 연결 종료 또는 에러: {e}")
                 try:
                     if bt_client is not None:
                         bt_client.close()
@@ -171,7 +171,7 @@ async def bt_accept_loop():
             bt_server.close()
 
 
-async def async_ble_main():
+async def async_bt_main():
     print("==================================================")
     print("라즈베리파이 Bluetooth 통신 서버 가동")
     print("==================================================")
@@ -182,11 +182,11 @@ async def async_ble_main():
     )
 
 
-def run_ble_server_process():
+def run_bt_server_process():
     try:
-        asyncio.run(async_ble_main())
+        asyncio.run(async_bt_main())
     except KeyboardInterrupt:
-        print("\n[ble_core.py] BLE 서버 종료 중...")
+        print("\n[bt_core.py] bt 서버 종료 중...")
         reset_hardware_to_sleep()
         if bt_client is not None:
             bt_client.close()
